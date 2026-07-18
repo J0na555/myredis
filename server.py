@@ -1,8 +1,13 @@
 import selectors
 import socket
 
+import resp
+
 # creating the best event notification system
+# for the current os
 # linux-> epoll, macos -> kqueue, windows -> select
+# this lets the os notify us when the socket is ready
+# instead of constantly checking them ourselves
 sel = selectors.DefaultSelector()
 
 
@@ -41,14 +46,29 @@ def handle_read(key):
         return
 
     client.read_buf += data
-    # TODO: parse complete RESP commands out of client.read_buf
-    # For now, just echo back to prove the loop works
-    client.write_buf += data
-    sel.modify(
-        conn,
-        selectors.EVENT_READ | selectors.EVENT_WRITE,
-        data=client
-    )
+
+    # drain as many complete commands as the buffer currently holds
+    while True:
+        args, consumed = resp.try_parse(client.read_buf)
+        if args is None:
+            break  # incomplete command, wait for more bytes
+        client.read_buf = client.read_buf[consumed:]
+        client.write_buf += dispatch(args)
+        # TODO: replace with commands.dispatch(args, store)
+
+    if client.write_buf:
+        sel.modify(conn, selectors.EVENT_READ |
+                   selectors.EVENT_WRITE, data=client)
+
+
+def dispatch(args):
+    # placeholder until commands.py exists
+    name = args[0].decode().upper()
+    if name == "PING":
+        return resp.simple_string("PONG")
+    if name == "ECHO" and len(args) == 2:
+        return resp.bulk_string(args[1])
+    return resp.error(f"ERR unknown command '{name}'")
 
 
 def handle_write(key):
@@ -58,7 +78,7 @@ def handle_write(key):
     if client.write_buf:
         # send upto a certain number not all data in the buffer
         sent = conn.send(client.write_buf)
-        # sends the rest that wasnot sent before
+        # remove the bytes that were sent, any remaining will stay in the buffer
         client.write_buf = client.write_buf[sent:]
     # if we done writing then we stop cause empty socket are always writable
     if not client.write_buf:
