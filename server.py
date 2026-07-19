@@ -2,6 +2,8 @@ import selectors
 import socket
 
 import resp
+import commands
+from store import Store
 
 # creating the best event notification system
 # for the current os
@@ -9,6 +11,7 @@ import resp
 # this lets the os notify us when the socket is ready
 # instead of constantly checking them ourselves
 sel = selectors.DefaultSelector()
+store = Store()
 
 
 class Client:
@@ -53,22 +56,11 @@ def handle_read(key):
         if args is None:
             break  # incomplete command, wait for more bytes
         client.read_buf = client.read_buf[consumed:]
-        client.write_buf += dispatch(args)
-        # TODO: replace with commands.dispatch(args, store)
+        client.write_buf += commands.dispatch(args, store)
 
     if client.write_buf:
         sel.modify(conn, selectors.EVENT_READ |
                    selectors.EVENT_WRITE, data=client)
-
-
-def dispatch(args):
-    # placeholder until commands.py exists
-    name = args[0].decode().upper()
-    if name == "PING":
-        return resp.simple_string("PONG")
-    if name == "ECHO" and len(args) == 2:
-        return resp.bulk_string(args[1])
-    return resp.error(f"ERR unknown command '{name}'")
 
 
 def handle_write(key):

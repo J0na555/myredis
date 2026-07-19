@@ -12,6 +12,7 @@ class Store:
         deadline = self.expires.get(key)
         return deadline is not None and time.time() * 1000 >= deadline
 
+    # lazy expiration
     def _expire_if_needed(self, key):
         if key in self.data and self._is_expired(key):
             del self.data[key]
