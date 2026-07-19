@@ -1,5 +1,6 @@
 import selectors
 import socket
+import time
 
 import resp
 import commands
@@ -12,6 +13,9 @@ from store import Store
 # instead of constantly checking them ourselves
 sel = selectors.DefaultSelector()
 store = Store()
+
+# seconds between sweeps, matches redis's ~10Hz serverCron
+ACTIVE_EXPIRE_INTERVAL = 0.1
 
 
 class Client:
@@ -87,9 +91,13 @@ def main():
     sel.register(server_sock, selectors.EVENT_READ, data=None)
     print("listening on 6380")
 
+    last_sweep = time.time()
+
     # the even loop
     while True:
-        events = sel.select(timeout=None)
+        # timeout means the loop wakes up periodically even if no client sends
+        # anything,that's what lets active expiry run without client traffic
+        events = sel.select(timeout=ACTIVE_EXPIRE_INTERVAL)
         for key, mask in events:
             if key.data is None:
                 accept_connection(key.fileobj)  # if nothing accept some nigga
@@ -98,6 +106,13 @@ def main():
                     handle_read(key)
                 if mask & selectors.EVENT_WRITE:
                     handle_write(key)
+
+        # only sweep once the interval has actually elapsed, not on every
+        # wakeup, a burst of client activity shouldn't spam the sweep
+        now = time.time()
+        if now - last_sweep >= ACTIVE_EXPIRE_INTERVAL:
+            store.active_expire_cycle()
+            last_sweep = now
 
 
 if __name__ == "__main__":
