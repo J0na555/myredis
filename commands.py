@@ -12,7 +12,7 @@ def cmd_ping(store, args):
 
 def cmd_echo(store, args):
     if len(args) != 2:
-        return resp.error("Err wrong number of arguments for 'echo' command")
+        return resp.error("ERR wrong number of arguments for 'echo' command")
     return resp.bulk_string(args[1])
 
 
@@ -29,16 +29,16 @@ def cmd_set(store, args):
     while i < len(args):
         opt = args[i].decode().upper()
         if opt == "PX":
-            if i + 1 > len(args):
-                return resp.error(ERR syntax error)
+            if i + 1 >= len(args):
+                return resp.error("ERR syntax error")
             try:
                 px = int(args[i+1])
             except ValueError:
-                return resp.error(ERR value is not an interger or out of range)
+                return resp.error("ERR value is not an interger or out of range")
 
             i += 2  # cause we took px 5000
         else:
-            resp.error(ERR syntax error)
+            resp.error("ERR syntax error")
 
     store.set(key, value, px=px)
     return resp.simple_string("OK")
@@ -69,7 +69,7 @@ def cmd_exists(store, args):
         return resp.error("ERR wrong number of argumens for 'exists' command")
     count = 0
     for k in args[1:]:
-        if store.exits(k.decode()):
+        if store.exists(k.decode()):
             count += 1
     return resp.integer(count)
 
@@ -108,7 +108,7 @@ COMMANDS = {
 
 # entry point
 def dispatch(args, store):
-    command = args[0].decode()
+    command = args[0].decode().upper()
     handler = COMMANDS.get(command)
     if handler is None:
         return resp.error(f"ERR unkown command {command}")
